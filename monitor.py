@@ -27,7 +27,7 @@ API_KEY = os.environ["AGENTROUTER_API_KEY"]
 MODEL = os.environ.get("AGENTROUTER_MODEL", "claude-opus-4-6")
 NTFY_TOPIC = os.environ["NTFY_TOPIC"]
 STATE_FILE = "state.json"
-TIMEOUT = 15
+TIMEOUT = 25
 
 
 def check_api():
@@ -80,10 +80,14 @@ def save_state(state):
 
 def notify(title, message, priority="default"):
     url = f"https://ntfy.sh/{NTFY_TOPIC}"
+    # HTTP headers are sent as latin-1. Emoji/unicode in a header value
+    # crashes urllib unless re-encoded this way (ntfy then reads it back
+    # as UTF-8 on their end, so the emoji still displays correctly).
+    safe_title = title.encode("utf-8").decode("latin-1")
     req = urllib.request.Request(
         url,
-        data=message.encode(),
-        headers={"Title": title, "Priority": priority},
+        data=message.encode("utf-8"),
+        headers={"Title": safe_title, "Priority": priority},
         method="POST",
     )
     try:
