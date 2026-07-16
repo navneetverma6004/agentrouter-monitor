@@ -28,13 +28,12 @@ import urllib.error
 import urllib.request
 
 AGENTROUTER_URL = "https://agentrouter.org/v1/messages"
-BALANCE_URL = "https://agentrouter.org/api/user/self"
 API_KEY = os.environ["AGENTROUTER_API_KEY"]
 MODEL = os.environ.get("AGENTROUTER_MODEL", "claude-opus-4-6")
 NTFY_TOPIC = os.environ["NTFY_TOPIC"]
-ACCESS_TOKEN = os.environ.get("AGENTROUTER_ACCESS_TOKEN")
-BALANCE_NOTIFY_SECONDS = 3 * 60 * 60  # send a balance update every 3 hours
-QUOTA_PER_USD = 500000  # New-API's standard ratio -- confirm against your console if it looks off
+BALANCE_NOTIFY_SECONDS = 2 * 60 * 60  # send a balance update every 3 hours
+BILLING_SUBSCRIPTION_URL = "https://agentrouter.org/v1/dashboard/billing/subscription"
+BILLING_USAGE_URL = "https://agentrouter.org/v1/dashboard/billing/usage?start_date=2020-01-01&end_date=2030-01-01"
 STATE_FILE = "state.json"
 TIMEOUT = 25
 
@@ -75,36 +74,27 @@ def check_api():
 
 
 def check_balance():
-    """Returns (balance_usd: float | None, detail: str). None if not configured/failed."""
-    if not ACCESS_TOKEN:
+    """Returns (balance_usd: float | None, detail: str). Tracks the API
+    key's own spending cap (set in the console), not total account credit."""
+    if not API_KEY:
         return None, "not configured"
-
-    req = urllib.request.Request(
-        BALANCE_URL,
-        headers={
-            "Authorization": f"Bearer {ACCESS_TOKEN}",
-            "New-Api-User": "220867",
-            "Accept": "application/json",
-        },
-        method="GET",
-    )
+    headers = {"Authorization": f"Bearer {API_KEY}", "Accept": "application/json"}
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            raw = resp.read().decode()
-            status = resp.status
-        if not raw.strip():
-            return None, f"empty response (HTTP {status})"
-        data = json.loads(raw)
-        if not data.get("success"):
-            return None, f"API returned success=false: {data.get('message')}"
-        quota = data["data"]["quota"]
-        balance_usd = quota / QUOTA_PER_USD
-        return balance_usd, "ok"
-    except json.JSONDecodeError:
-        return None, f"non-JSON response: {raw[:150]!r}"
+        with urllib.request.urlopen(
+            urllib.request.Request(BILLING_SUBSCRIPTION_URL, headers=headers), timeout=TIMEOUT
+        ) as resp:
+            sub = json.loads(resp.read().decode())
+        with urllib.request.urlopen(
+            urllib.request.Request(BILLING_USAGE_URL, headers=headers), timeout=TIMEOUT
+        ) as resp:
+            usage = json.loads(resp.read().decode())
+        limit = sub["hard_limit_usd"]
+        used = usage["total_usage"] / 100
+        return limit - used, "ok"
+    except json.JSONDecodeError as e:
+        return None, f"non-JSON response ({e})"
     except Exception as e:
         return None, f"error ({e})"
-
 
 def load_state():
     try:
