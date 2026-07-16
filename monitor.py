@@ -13,7 +13,12 @@ Required environment variables (set as GitHub Actions secrets):
   NTFY_TOPIC           - a unique, hard-to-guess topic name for ntfy.sh
 
 Optional:
-  AGENTROUTER_MODEL    - defaults to claude-opus-4-6
+  AGENTROUTER_MODEL      - defaults to claude-opus-4-6
+  AGENTROUTER_ACCESS_TOKEN - your New-API personal access token (Console ->
+                             Personal Settings). If set, also reports and
+                             alerts on remaining credit balance.
+  LOW_BALANCE_USD_ALERT  - alert once when balance drops below this many
+                             dollars. Defaults to 10.
 """
 
 import json
@@ -23,9 +28,13 @@ import urllib.error
 import urllib.request
 
 AGENTROUTER_URL = "https://agentrouter.org/v1/messages"
+BALANCE_URL = "https://agentrouter.org/api/user/self"
 API_KEY = os.environ["AGENTROUTER_API_KEY"]
 MODEL = os.environ.get("AGENTROUTER_MODEL", "claude-opus-4-6")
 NTFY_TOPIC = os.environ["NTFY_TOPIC"]
+ACCESS_TOKEN = os.environ.get("AGENTROUTER_ACCESS_TOKEN")
+BALANCE_NOTIFY_SECONDS = 3 * 60 * 60  # send a balance update every 3 hours
+QUOTA_PER_USD = 500000  # New-API's standard ratio -- confirm against your console if it looks off
 STATE_FILE = "state.json"
 TIMEOUT = 25
 
@@ -65,6 +74,31 @@ def check_api():
         return False, f"error ({e})"
 
 
+def check_balance():
+    """Returns (balance_usd: float | None, detail: str). None if not configured/failed."""
+    if not ACCESS_TOKEN:
+        return None, "not configured"
+
+    req = urllib.request.Request(
+        BALANCE_URL,
+        headers={
+            "Authorization": f"Bearer {ACCESS_TOKEN}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            data = json.loads(resp.read().decode())
+            if not data.get("success"):
+                return None, f"API returned success=false: {data.get('message')}"
+            quota = data["data"]["quota"]
+            balance_usd = quota / QUOTA_PER_USD
+            return balance_usd, "ok"
+    except Exception as e:
+        return None, f"error ({e})"
+
+
 def load_state():
     try:
         with open(STATE_FILE) as f:
@@ -101,7 +135,9 @@ def main():
     up, detail = check_api()
     now = "up" if up else "down"
 
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] status={now} ({detail})")
+    balance_usd, balance_detail = check_balance()
+    balance_log = f", balance=${balance_usd:.2f}" if balance_usd is not None else ""
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] status={now} ({detail}){balance_log}")
 
     if prev.get("status") != now:
         if now == "down":
@@ -109,7 +145,21 @@ def main():
         elif prev.get("status") != "unknown":
             notify("🟢 AgentRouter is back UP", f"Recovered: {detail}", priority="default")
 
-    save_state({"status": now, "last_checked": time.time(), "detail": detail})
+    # Periodic balance update -- every 3 hours, not every 5-min run.
+    last_notified = prev.get("last_balance_notify", 0)
+    if balance_usd is not None and time.time() - last_notified >= BALANCE_NOTIFY_SECONDS:
+        notify("AgentRouter balance", f"${balance_usd:.2f} remaining", priority="default")
+        last_notified = time.time()
+
+    save_state(
+        {
+            "status": now,
+            "last_checked": time.time(),
+            "detail": detail,
+            "balance_usd": balance_usd,
+            "last_balance_notify": last_notified,
+        }
+    )
 
 
 if __name__ == "__main__":
