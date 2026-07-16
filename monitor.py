@@ -90,12 +90,18 @@ def check_balance():
     )
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            data = json.loads(resp.read().decode())
-            if not data.get("success"):
-                return None, f"API returned success=false: {data.get('message')}"
-            quota = data["data"]["quota"]
-            balance_usd = quota / QUOTA_PER_USD
-            return balance_usd, "ok"
+            raw = resp.read().decode()
+            status = resp.status
+        if not raw.strip():
+            return None, f"empty response (HTTP {status})"
+        data = json.loads(raw)
+        if not data.get("success"):
+            return None, f"API returned success=false: {data.get('message')}"
+        quota = data["data"]["quota"]
+        balance_usd = quota / QUOTA_PER_USD
+        return balance_usd, "ok"
+    except json.JSONDecodeError:
+        return None, f"non-JSON response: {raw[:150]!r}"
     except Exception as e:
         return None, f"error ({e})"
 
