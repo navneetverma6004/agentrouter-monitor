@@ -79,25 +79,32 @@ def check_balance():
     if not API_KEY:
         return None, "not configured"
     headers = {"Authorization": f"Bearer {API_KEY}", "Accept": "application/json"}
+
     try:
         req1 = urllib.request.Request(BILLING_SUBSCRIPTION_URL, headers=headers)
         with urllib.request.urlopen(req1, timeout=TIMEOUT) as resp:
             raw1 = resp.read().decode()
+    except Exception as e:
+        return None, f"subscription request error ({e})"
+    try:
         sub = json.loads(raw1)
+    except json.JSONDecodeError:
+        return None, f"subscription non-JSON: {raw1[:150]!r}"
 
+    try:
         req2 = urllib.request.Request(BILLING_USAGE_URL, headers=headers)
         with urllib.request.urlopen(req2, timeout=TIMEOUT) as resp:
             raw2 = resp.read().decode()
-        usage = json.loads(raw2)
-
-        limit = sub["hard_limit_usd"]
-        used = usage["total_usage"] / 100
-        return limit - used, "ok"
-    except json.JSONDecodeError:
-        bad = raw1 if "raw1" not in dir() or not raw1.strip() else raw2
-        return None, f"non-JSON: {bad[:150]!r}"
     except Exception as e:
-        return None, f"error ({e})"
+        return None, f"usage request error ({e})"
+    try:
+        usage = json.loads(raw2)
+    except json.JSONDecodeError:
+        return None, f"usage non-JSON: {raw2[:150]!r}"
+
+    limit = sub["hard_limit_usd"]
+    used = usage["total_usage"] / 100
+    return limit - used, "ok"
 
 def load_state():
     try:
