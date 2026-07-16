@@ -83,6 +83,7 @@ def check_balance():
         BALANCE_URL,
         headers={
             "Authorization": f"Bearer {ACCESS_TOKEN}",
+            "New-Api-User": "220867",
             "Accept": "application/json",
         },
         method="GET",
@@ -136,7 +137,7 @@ def main():
     now = "up" if up else "down"
 
     balance_usd, balance_detail = check_balance()
-    balance_log = f", balance=${balance_usd:.2f}" if balance_usd is not None else ""
+    balance_log = f", balance=${balance_usd:.2f}" if balance_usd is not None else f", balance_check_failed ({balance_detail})"
     print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] status={now} ({detail}){balance_log}")
 
     if prev.get("status") != now:
