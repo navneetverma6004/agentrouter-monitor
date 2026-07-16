@@ -34,6 +34,15 @@ In the repo: **Settings → Secrets and variables → Actions → New repository
 |---|---|
 | `AGENTROUTER_API_KEY` | Your AgentRouter API key (from the console) |
 | `NTFY_TOPIC` | The topic name you picked above, e.g. `agentrouter-jai-9f3k2x` |
+| `AGENTROUTER_ACCESS_TOKEN` | *(optional)* Personal access token from Console → Personal Settings. Enables balance tracking. |
+
+If you set `AGENTROUTER_ACCESS_TOKEN`, the monitor also checks your credit
+balance on every run and sends a one-time alert when it drops below $10
+(change with the `LOW_BALANCE_USD_ALERT` env var in the workflow file if
+you want a different threshold). The balance check uses the standard
+New-API ratio of 500,000 quota units = $1 — worth double-checking that
+against the number shown on your own dashboard, since some deployments
+customize it.
 
 ## 4. Test it
 
