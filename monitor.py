@@ -80,19 +80,22 @@ def check_balance():
         return None, "not configured"
     headers = {"Authorization": f"Bearer {API_KEY}", "Accept": "application/json"}
     try:
-        with urllib.request.urlopen(
-            urllib.request.Request(BILLING_SUBSCRIPTION_URL, headers=headers), timeout=TIMEOUT
-        ) as resp:
-            sub = json.loads(resp.read().decode())
-        with urllib.request.urlopen(
-            urllib.request.Request(BILLING_USAGE_URL, headers=headers), timeout=TIMEOUT
-        ) as resp:
-            usage = json.loads(resp.read().decode())
+        req1 = urllib.request.Request(BILLING_SUBSCRIPTION_URL, headers=headers)
+        with urllib.request.urlopen(req1, timeout=TIMEOUT) as resp:
+            raw1 = resp.read().decode()
+        sub = json.loads(raw1)
+
+        req2 = urllib.request.Request(BILLING_USAGE_URL, headers=headers)
+        with urllib.request.urlopen(req2, timeout=TIMEOUT) as resp:
+            raw2 = resp.read().decode()
+        usage = json.loads(raw2)
+
         limit = sub["hard_limit_usd"]
         used = usage["total_usage"] / 100
         return limit - used, "ok"
-    except json.JSONDecodeError as e:
-        return None, f"non-JSON response ({e})"
+    except json.JSONDecodeError:
+        bad = raw1 if "raw1" not in dir() or not raw1.strip() else raw2
+        return None, f"non-JSON: {bad[:150]!r}"
     except Exception as e:
         return None, f"error ({e})"
 
