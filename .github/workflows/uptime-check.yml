@@ -25,6 +25,7 @@ jobs:
         env:
           AGENTROUTER_API_KEY: ${{ secrets.AGENTROUTER_API_KEY }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          AGENTROUTER_ACCESS_TOKEN: ${{ secrets.AGENTROUTER_ACCESS_TOKEN }}
         run: python3 monitor.py
 
       - name: Save state for next run
